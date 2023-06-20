@@ -1,22 +1,21 @@
 #include <LiquidCrystal.h>
 #include <Wire.h>
 
-#define dispCA1 13;
+#define dispCA1 13
 
 volatile unsigned char t0Count = 0;
 volatile unsigned char t1Count = 0;
-volatile unsigned char printLCD = 0;
 volatile unsigned char dispSelect = 0;
 volatile unsigned char dispSwitch = 1;
 byte dispConvert[] = {B10000001, B11111001, B10001010, B11001000, B11110000, B11000100, B10000100, B11101001, B10000000, B11000000};
 
-unsigned char colPins[3] = {10, 9, 8}; //pinos digitais ligados às colunas 1, 2 e 3 do teclado
-unsigned char rowPins[3] = {11, 12, 0, 1}; //pinos digitais ligados às linhas 1, 2 e 4 do teclado
-unsigned char keyMatrix[3][3] = {{'1', '2', '3'}, {'4', '5', '6'}, {'*', '0', '#'}};
+unsigned char colPins[3] = {11, 12, 10}; //pinos digitais ligados às colunas 1, 2 e 3 do teclado
+unsigned char rowPins[4] = {9, 8, 0, 1}; //pinos digitais ligados às linhas 1, 2, 3 e 4 do teclado
+unsigned char keyMatrix[4][3] = {{'1', '2', '3'}, {'4', '5', '6'}, {'7', '8', '9'}, {'#', '0', '*'}};
 char command;
 
 volatile unsigned char loggerEn = 0;
-volatile float temperature;
+volatile float temperature = 1234;
 
 LiquidCrystal lcd(7, 6, 5, 4, 3, 2);
 
@@ -37,9 +36,11 @@ void setup(){
     pinMode(A0, INPUT);
 
     //configura pinos de saída/entrada para teclado matricial
-    for (int i = 0; i <= 2; i++){
+    for (int i = 0; i <= 3; i++){
         pinMode(rowPins[i], INPUT); //coloca as linhas em alta impedancia
         digitalWrite(rowPins[i], LOW);
+    }
+    for (int i = 0; i <= 2; i++){
         pinMode(colPins[i], INPUT_PULLUP);
     }
     
@@ -51,33 +52,19 @@ void setup(){
 }
 
 void loop(){
-    commandDecode(keypadScan()); //varre pinos do teclado
-    //mostra estado no display LCD
-    if (printLCD){  
-        printLCD = 0;
-        lcd.home();
-        switch (motorDir){
-            case 0:
-                lcd.print("     PARADO     ");
-                break;
-            case -1:
-                lcd.print("    EXAUSTOR    ");
-                break;
-            case 1:
-                lcd.print("   VENTILADOR   ");
-                break;    
-            default:
-                break;
-        }
-        lcd.setCursor(6, 2);
-        lcd.print(speedRef+"%");
+    //commandDecode(keypadScan()); //varre pinos do teclado
+    char key = keypadScan();
+    if(key != 'z'){
+        printLCD(String(key), " ");
+        delay(200);
     }
+
 
     // troca display de 7 segmentos ativo
     if (dispSwitch){
         dispSwitch = 0;
         char buffer[4];
-        sprintf(buffer, "%04d", speedRB);
+        sprintf(buffer, "%04d", temperature);
         Wire.beginTransmission(32);
         byte pcfMsg = dispConvert[buffer[dispSelect]-48];
         if (dispSelect == 2){
@@ -97,9 +84,9 @@ void loop(){
 }
 
 char keypadScan(){
-    for (int i = 0; i <= 2; i++){
+    for (int i = 0; i <= 3; i++){
         pinMode(rowPins[i], OUTPUT);
-        for (int j = 0; j <= 2, j++){
+        for (int j = 0; j <= 2; j++){
             if(digitalRead(colPins[j]) == 0){
                 delay(2);
                 if(digitalRead(colPins[j]) == 0){
@@ -151,7 +138,7 @@ void commandDecode(char key){
 void commandExec(char command){
     switch (command){
     case 1:
-        printLCD("Memoria  apagada", "                ")
+        printLCD("Memoria  apagada", "                ");
         //resetar memoria
         break;
     case 2:
@@ -165,16 +152,20 @@ void commandExec(char command){
         printLCD("Coleta de dados ", "   finalizada   ");
         loggerEn = 0;
         break;
-    case 5:
+    case 5:{
         printLCD(" Quantidade  de ", " medidas:       ");
         String quantityStr;
-        for (int i, i < 5, i++){
-            key = 'z';
+        for (int i; i < 5; i++){
+            char key = 'z';
             while(key == 'z'){
                 key = keypadScan();
             }
-            if(key == '*'){return;}
-            if(key == "#"){break;}
+            if(key == '*'){
+                return;
+            }
+            if(key == '#'){
+                break;
+            }
             quantityStr.concat(key);
             lcd.setCursor(i+10, 1);
             lcd.print(key);
@@ -187,6 +178,7 @@ void commandExec(char command){
             printLCD("   Quantidade   ", "    invalida    ");
         }
         break;
+    }
     default:
         break;
     }
@@ -228,10 +220,7 @@ ISR(TIMER1_COMPA_vect){
     t1Count++;
     if (t1Count >= 20){
         t1Count = 0;
-        temperature = analogRead(0)*0.49; //T = read*4.9mV/10mV (resoluacao do AD/ganho do sensor)
-        speedRB = encoderCount*15; //vel RPM = 60*(n bordas do pino 12)/(2 pás da hélice)/(2 bordas por pá) 
-        encoderCount = 0;
-        printLCD = 1;
+        //temperature = analogRead(0)*0.49; //T = read*4.9mV/10mV (resoluacao do AD/ganho do sensor)
     }
     
 }
