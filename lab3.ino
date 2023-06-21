@@ -15,7 +15,7 @@ unsigned char keyMatrix[4][3] = {{'1', '2', '3'}, {'4', '5', '6'}, {'7', '8', '9
 char command;
 
 volatile unsigned char loggerEn = 0;
-volatile float temperature = 1234;
+volatile unsigned int temperature = 1234;
 
 LiquidCrystal lcd(7, 6, 5, 4, 3, 2);
 
@@ -52,13 +52,7 @@ void setup(){
 }
 
 void loop(){
-    //commandDecode(keypadScan()); //varre pinos do teclado
-    char key = keypadScan();
-    if(key != 'z'){
-        printLCD(String(key), " ");
-        delay(200);
-    }
-
+    commandDecode(keypadScan()); //varre pinos do teclado
 
     // troca display de 7 segmentos ativo
     if (dispSwitch){
@@ -68,7 +62,7 @@ void loop(){
         Wire.beginTransmission(32);
         byte pcfMsg = dispConvert[buffer[dispSelect]-48];
         if (dispSelect == 2){
-            pcfMsg &= B01111111;
+            pcfMsg &= B01111111; //acende apenas DP3
         }
         Wire.write(pcfMsg);
         Wire.endTransmission();
@@ -88,8 +82,12 @@ char keypadScan(){
         pinMode(rowPins[i], OUTPUT);
         for (int j = 0; j <= 2; j++){
             if(digitalRead(colPins[j]) == 0){
-                delay(2);
+                delay(5);
                 if(digitalRead(colPins[j]) == 0){
+                    while (digitalRead(colPins[j]) == 0){
+                        ;
+                    } //espera soltar botao
+                    delay(5); 
                     pinMode(rowPins[i], INPUT);
                     return keyMatrix[i][j];
                 }
@@ -145,8 +143,8 @@ void commandExec(char command){
         //mostra numero de dados gravados;
         break;
     case 3:
-        printLCD("Coleta de dados ", "   iniciada   ");
-        loggerEn = 1;
+        printLCD("Coleta de dados ", "    iniciada    ");
+        //loggerEn = 1;
         break;
     case 4:
         printLCD("Coleta de dados ", "   finalizada   ");
@@ -154,10 +152,12 @@ void commandExec(char command){
         break;
     case 5:{
         printLCD(" Quantidade  de ", " medidas:       ");
-        String quantityStr;
-        for (int i; i < 5; i++){
+        String quantityStr = "";
+        for (int i=0; i < 5; i++){
             char key = 'z';
             while(key == 'z'){
+                //lcd.setCursor(10, 1);
+                //lcd.print(key);
                 key = keypadScan();
             }
             if(key == '*'){
@@ -173,7 +173,7 @@ void commandExec(char command){
         int quantity = quantityStr.toInt();
         if (quantity > 0 && quantity < 1023){
             //transferir dados
-            printLCD(quantityStr+"   medidas  ", "  transferidas  ");
+            printLCD(quantityStr+" medidas       ", "transferidas    ");
         }else{
             printLCD("   Quantidade   ", "    invalida    ");
         }
