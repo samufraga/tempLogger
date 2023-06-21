@@ -220,7 +220,6 @@ ISR(TIMER1_COMPA_vect){
     t1Count++;
     if (t1Count >= 20){
         t1Count = 0;
-        //temperature = analogRead(0)*0.49; //T = read*4.9mV/10mV (resoluacao do AD/ganho do sensor)
+        temperature = analogRead(0)*4.9 - 2; //T = read*4.9mV/10mV*10 (resoluacao do AD/ganho do sensor)
     }
-    
 }
