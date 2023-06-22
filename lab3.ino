@@ -13,6 +13,9 @@ unsigned char colPins[3] = {11, 12, 10}; //pinos digitais ligados às colunas 1,
 unsigned char rowPins[4] = {9, 8, 0, 1}; //pinos digitais ligados às linhas 1, 2, 3 e 4 do teclado
 unsigned char keyMatrix[4][3] = {{'1', '2', '3'}, {'4', '5', '6'}, {'7', '8', '9'}, {'#', '0', '*'}};
 char command;
+char quantityWait;
+char quantityCount;
+String quantityStr;
 
 volatile unsigned char loggerEn = 0;
 volatile unsigned int temperature = 1234;
@@ -52,7 +55,33 @@ void setup(){
 }
 
 void loop(){
-    commandDecode(keypadScan()); //varre pinos do teclado
+    char key = keypadScan();
+    if (key != 'z'){
+        if (quantityWait){
+            switch (key){
+                case '*':
+                    quantityWait = 0;
+                    quantityCount = 0;
+                    commandDecode('*');
+                    break;
+                case '#':
+                    transferData(quantityStr.toInt());
+                    break;
+                default:
+                    quantityStr.concat(key);
+                    lcd.setCursor(quantityCount+10, 1);
+                    lcd.print(key);
+                    quantityCount++;
+                    if(quantityCount==4){
+                        transferData(quantityStr.toInt());
+                    }
+                    break;
+            }
+        }else{
+            commandDecode(key);
+        }
+    }
+    
 
     // troca display de 7 segmentos ativo
     if (dispSwitch){
@@ -150,35 +179,12 @@ void commandExec(char command){
         printLCD("Coleta de dados ", "   finalizada   ");
         loggerEn = 0;
         break;
-    case 5:{
+    case 5:
         printLCD(" Quantidade  de ", " medidas:       ");
-        String quantityStr = "";
-        for (int i=0; i < 5; i++){
-            char key = 'z';
-            while(key == 'z'){
-                //lcd.setCursor(10, 1);
-                //lcd.print(key);
-                key = keypadScan();
-            }
-            if(key == '*'){
-                return;
-            }
-            if(key == '#'){
-                break;
-            }
-            quantityStr.concat(key);
-            lcd.setCursor(i+10, 1);
-            lcd.print(key);
-        }
-        int quantity = quantityStr.toInt();
-        if (quantity > 0 && quantity < 1023){
-            //transferir dados
-            printLCD(quantityStr+" medidas       ", "transferidas    ");
-        }else{
-            printLCD("   Quantidade   ", "    invalida    ");
-        }
+        quantityStr = "";
+        quantityWait = 1;
+        quantityCount = 0;
         break;
-    }
     default:
         break;
     }
@@ -190,6 +196,18 @@ void printLCD(String row0, String row1){
     lcd.setCursor(0, 1);
     lcd.print(row1);
 }
+
+
+void transferData(int quantity){
+    if (quantity > 0 && quantity < 1023){
+        //transferir dados
+        printLCD(quantityStr+" medida(s)     ", "transferida(s)  ");
+    }else{
+        printLCD("   Quantidade   ", "    invalida    ");
+    }
+    quantityWait = 0;
+}
+
 
 void set_Timer(){
     //configura timer0 com 1ms entre interrupções para troca do display de 7 seg
