@@ -12,6 +12,7 @@ byte dispConvert[] = {B10000001, B11111001, B10001010, B11001000, B11110000, B11
 unsigned char colPins[3] = {11, 12, 10}; //pinos digitais ligados às colunas 1, 2 e 3 do teclado
 unsigned char rowPins[4] = {9, 8, 0, 1}; //pinos digitais ligados às linhas 1, 2, 3 e 4 do teclado
 unsigned char keyMatrix[4][3] = {{'1', '2', '3'}, {'4', '5', '6'}, {'7', '8', '9'}, {'#', '0', '*'}};
+
 char command;
 char quantityWait;
 char quantityCount;
@@ -20,7 +21,7 @@ String quantityStr;
 
 volatile char loggerEn = 0;
 volatile char storeData = 0;
-volatile unsigned int temperature = 1234;
+volatile unsigned int temperature = 0;
 
 LiquidCrystal lcd(7, 6, 5, 4, 3, 2);
 
@@ -88,7 +89,7 @@ void loop(){
     if(loggerEn && storeData){
         word pointer = eepromGetPointer();
         eepromWrite(pointer>>8 | B01010000, pointer & 0xFF, temperature);
-        if (pointer < 1022){
+        if (pointer < 2046){
             pointer += 2;
         }
         eepromSetPointer(pointer);
@@ -131,8 +132,8 @@ char keypadScan(){
                 delay(5);
                 if(digitalRead(colPins[j]) == 0){
                     while (digitalRead(colPins[j]) == 0){
-                        ;
-                    } //espera soltar botao
+                        ; //espera soltar botao
+                    }
                     delay(5); 
                     pinMode(rowPins[i], INPUT);
                     return keyMatrix[i][j];
@@ -224,7 +225,7 @@ void transferData(int quantity){
         //transferir dados
         Serial.begin(9600);
         for(int i=0; i<2*quantity; i+=2){
-            Serial.println(eepromRead(i>>8 | B01010000, i & 0xFF));
+            Serial.println(eepromRead(i>>8 | B01010000, i & 0xFF)/10);
         }
         Serial.end();
         printLCD(quantityStr+" medida(s)     ", "transferida(s)  ");
@@ -267,17 +268,6 @@ ISR(TIMER1_COMPA_vect){
         temperature = analogRead(0)*4.9 - 2; //T = read*4.9mV/10mV*10 (resoluacao do AD/ganho do sensor)
         storeData = 1;
     }
-
-    /* if(loggerEn){
-        word pointer = eepromGetPointer();
-        //byte addrMSB = pointer>>8 | B01010000;
-        //byte addrLSB = pointer & 0xFF;
-        eepromWrite(pointer>>8 | B01010000, pointer & 0xFF, temperature);
-        if (pointer < 1022){
-            pointer += 2;
-        }
-        eepromSetPointer(pointer);
-    } */
 }
 
 void eepromWrite(byte deviceAddr, byte wordAddr, word data) {
@@ -286,7 +276,7 @@ void eepromWrite(byte deviceAddr, byte wordAddr, word data) {
   Wire.write(data>>8 & 0xFF);
   Wire.write(data & 0xFF);
   Wire.endTransmission();
-  delay(2);
+  delay(3);
 }
 
 void eepromSetPointer(word dataAddr){
@@ -295,7 +285,7 @@ void eepromSetPointer(word dataAddr){
   Wire.write(dataAddr>>8 & 0xFF); //MSB
   Wire.write(dataAddr & 0xFF); //LSB
   Wire.endTransmission();
-  delay(2);
+  delay(3);
 }
 
 word eepromRead(byte deviceAddr, byte wordAddr) {
