@@ -15,13 +15,15 @@ unsigned char keyMatrix[4][3] = {{'1', '2', '3'}, {'4', '5', '6'}, {'7', '8', '9
 char command;
 char quantityWait;
 char quantityCount;
+char statusUpdate = 0;
 String quantityStr;
 
-volatile unsigned char loggerEn = 0;
+volatile char loggerEn = 0;
 volatile char storeData = 0;
 volatile unsigned int temperature = 1234;
 
 LiquidCrystal lcd(7, 6, 5, 4, 3, 2);
+
 
 //máscaras para ativar pinos que controlam os displays
 byte dispEnMask;
@@ -48,7 +50,6 @@ void setup(){
         pinMode(colPins[i], INPUT_PULLUP);
     }
     
-    //Serial.begin(9600);
     lcd.begin(16, 2);
     lcd.clear();
     lcd.home();
@@ -84,18 +85,19 @@ void loop(){
     }
 
     //grava temperatura na EEPROM
-    /*
     if(loggerEn && storeData){
         word pointer = eepromGetPointer();
-        //byte addrMSB = pointer>>8 | B01010000;
-        //byte addrLSB = pointer & 0xFF;
         eepromWrite(pointer>>8 | B01010000, pointer & 0xFF, temperature);
         if (pointer < 1022){
             pointer += 2;
         }
         eepromSetPointer(pointer);
         storeData = 0;
-    }*/
+        if (command == 2 && statusUpdate){
+            int ndata = eepromGetPointer()/2;
+            printLCD("Gravados: "+String(ndata)+"     ", "Disponivel: "+String(1022-ndata)+"   ");
+        }
+    }
     
 
     // troca display de 7 segmentos ativo
@@ -166,7 +168,7 @@ void commandDecode(char key){
             printLCD("Transferir dados", "#sim    *cancela");
             break;
         case '#':
-            commandExec(command);
+            commandExec();
             break;
         case '*':
             lcd.clear();
@@ -177,33 +179,35 @@ void commandDecode(char key){
     }
 }
 
-void commandExec(char command){
+void commandExec(){
     switch (command){
-    case 1:
-        printLCD("Memoria  apagada", "                ");
-        eepromSetPointer(0); //resetar memoria
-        break;
-    case 2:
-        //mostra numero de dados gravados;
-        int ndata = eepromGetPointer()/2;
-        printLCD("Gravados: "+String(ndata), "Disponivel"+String(1022-ndata));
-        break;
-    case 3:
-        printLCD("Coleta de dados ", "    iniciada    ");
-        loggerEn = 1;
-        break;
-    case 4:
-        printLCD("Coleta de dados ", "   finalizada   ");
-        loggerEn = 0;
-        break;
-    case 5:
-        printLCD(" Quantidade  de ", " medidas:       ");
-        quantityStr = "";
-        quantityWait = 1;
-        quantityCount = 0;
-        break;
-    default:
-        break;
+        case 1:
+            printLCD("Memoria  apagada", "                ");
+            eepromSetPointer(0); //resetar memoria
+            break;
+        case 2:{
+            //mostra numero de dados gravados;
+            int ndata = eepromGetPointer()/2;
+            printLCD("Gravados: "+String(ndata)+"     ", "Disponivel: "+String(1022-ndata)+"   ");
+            statusUpdate = 1;
+            break;
+        }
+        case 3:
+            printLCD("Coleta de dados ", "    iniciada    ");
+            loggerEn = 1;
+            break;
+        case 4:
+            printLCD("Coleta de dados ", "   finalizada   ");
+            loggerEn = 0;
+            break;
+        case 5:
+            printLCD(" Quantidade  de ", " medidas:       ");
+            quantityStr = "";
+            quantityWait = 1;
+            quantityCount = 0;
+            break;
+        default:
+            break;
     }
 }
 
@@ -218,10 +222,11 @@ void printLCD(String row0, String row1){
 void transferData(int quantity){
     if (quantity > 0 && quantity < 1023){
         //transferir dados
-        int ndata = eepromGetPointer()/2;
-        for(int i=0; i<ndata; i+=2){
+        Serial.begin(9600);
+        for(int i=0; i<2*quantity; i+=2){
             Serial.println(eepromRead(i>>8 | B01010000, i & 0xFF));
         }
+        Serial.end();
         printLCD(quantityStr+" medida(s)     ", "transferida(s)  ");
     }else{
         printLCD("   Quantidade   ", "    invalida    ");
@@ -263,7 +268,7 @@ ISR(TIMER1_COMPA_vect){
         storeData = 1;
     }
 
-    if(loggerEn){
+    /* if(loggerEn){
         word pointer = eepromGetPointer();
         //byte addrMSB = pointer>>8 | B01010000;
         //byte addrLSB = pointer & 0xFF;
@@ -272,7 +277,7 @@ ISR(TIMER1_COMPA_vect){
             pointer += 2;
         }
         eepromSetPointer(pointer);
-    }
+    } */
 }
 
 void eepromWrite(byte deviceAddr, byte wordAddr, word data) {
@@ -281,7 +286,7 @@ void eepromWrite(byte deviceAddr, byte wordAddr, word data) {
   Wire.write(data>>8 & 0xFF);
   Wire.write(data & 0xFF);
   Wire.endTransmission();
-  //delay(2);
+  delay(2);
 }
 
 void eepromSetPointer(word dataAddr){
@@ -290,7 +295,7 @@ void eepromSetPointer(word dataAddr){
   Wire.write(dataAddr>>8 & 0xFF); //MSB
   Wire.write(dataAddr & 0xFF); //LSB
   Wire.endTransmission();
-  //delay(2);
+  delay(2);
 }
 
 word eepromRead(byte deviceAddr, byte wordAddr) {
