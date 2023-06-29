@@ -7,6 +7,7 @@ volatile unsigned char t0Count = 0;
 volatile unsigned char t1Count = 0;
 volatile unsigned char dispSelect = 0;
 volatile unsigned char dispSwitch = 1;
+byte dispEnMask;
 byte dispConvert[] = {B10000001, B11111001, B10001010, B11001000, B11110000, B11000100, B10000100, B11101001, B10000000, B11000000};
 
 unsigned char colPins[3] = {11, 12, 10}; //pinos digitais ligados às colunas 1, 2 e 3 do teclado
@@ -25,12 +26,8 @@ volatile unsigned int temperature = 0;
 
 LiquidCrystal lcd(7, 6, 5, 4, 3, 2);
 
-
-//máscaras para ativar pinos que controlam os displays
-byte dispEnMask;
-
 void setup(){
-    //configura interrupcoes
+    //configura interrupções
     cli(); 
     set_Timer();
     sei();
@@ -44,7 +41,7 @@ void setup(){
 
     //configura pinos de saída/entrada para teclado matricial
     for (int i = 0; i <= 3; i++){
-        pinMode(rowPins[i], INPUT); //coloca as linhas em alta impedancia
+        pinMode(rowPins[i], INPUT); //coloca as linhas em alta impedância
         digitalWrite(rowPins[i], LOW);
     }
     for (int i = 0; i <= 2; i++){
@@ -58,8 +55,13 @@ void setup(){
 }
 
 void loop(){
+    //lê teclado matricial
     char key = keypadScan();
+
+    //identifica que alguma tecla foi pressionada
     if (key != 'z'){
+        //se está aguardando digitar quantidade de dados, armazena os dígitos a cada loop
+        //até receber 4 dígitos ou #, mostrando no LCD os números inseridos.
         if (quantityWait){
             switch (key){
                 case '*':
@@ -80,20 +82,22 @@ void loop(){
                     }
                     break;
             }
+        //se não, decodifica commando digitado
         }else{
             commandDecode(key);
         }
     }
 
-    //grava temperatura na EEPROM
+    //grava temperatura na EEPROM, atualizando status no LCD se o comando foi dado anteriormente
     if(loggerEn && storeData){
-        word pointer = eepromGetPointer();
-        eepromWrite(pointer>>8 | B01010000, pointer & 0xFF, temperature);
+        word pointer = eepromGetPointer();  //lê endereço a ser gravado do final da EEPROM
+        eepromWrite(pointer>>8 | B01010000, pointer & 0xFF, temperature); //grava temperatura na EEPROM
         if (pointer < 2046){
-            pointer += 2;
+            pointer += 2; //incrementa endereço de gravação
         }
-        eepromSetPointer(pointer);
+        eepromSetPointer(pointer); //escreve endereço de gravação na EEPROM
         storeData = 0;
+        //atualiza status no LCD
         if (command == 2 && statusUpdate){
             int ndata = eepromGetPointer()/2;
             printLCD("Gravados: "+String(ndata)+"     ", "Disponivel: "+String(1022-ndata)+"   ");
@@ -124,6 +128,9 @@ void loop(){
     }
 }
 
+//função de varredura do teclado matricial: para cada linha, configura o respectivo pino como saída,
+//o qual passa de alta impedância para nível 0, entao lê cada coluna e no final retorna pino para alta impedância.
+//Se alguma tecla foi pressionada, aguarda tempo de bouncing e espera soltar a tecla, retornando o respectivo caracter
 char keypadScan(){
     for (int i = 0; i <= 3; i++){
         pinMode(rowPins[i], OUTPUT);
@@ -132,7 +139,7 @@ char keypadScan(){
                 delay(5);
                 if(digitalRead(colPins[j]) == 0){
                     while (digitalRead(colPins[j]) == 0){
-                        ; //espera soltar botao
+                        ; //espera soltar tecla
                     }
                     delay(5); 
                     pinMode(rowPins[i], INPUT);
@@ -145,7 +152,8 @@ char keypadScan(){
     return 'z';
 }
 
-//decodificacao de mensagens bluetooth
+//decodifação das teclas. Se for tecla de comando, registra comando e mostra requisição de confirmação no LCD.
+//Se for "#", executa comando registrado, se "*" cancela.
 void commandDecode(char key){
     switch (key){
         case '1':
@@ -180,6 +188,8 @@ void commandDecode(char key){
     }
 }
 
+//execução dos comandos. Se for 5, solicita entrada da quantidade de medidas, se não executa comando
+//e mostra confirmação no LCD.
 void commandExec(){
     switch (command){
         case 1:
@@ -212,6 +222,7 @@ void commandExec(){
     }
 }
 
+//escreve texto em todo o LCD.
 void printLCD(String row0, String row1){
     lcd.home();
     lcd.print(row0);
@@ -219,10 +230,10 @@ void printLCD(String row0, String row1){
     lcd.print(row1);
 }
 
-
+//execução do comando 5. Verifica se a quantidade de medidas solicitadas é válida e transfere a quantidade desejada
+//ou mostra mensagem de erro no LCD. 
 void transferData(int quantity){
     if (quantity > 0 && quantity < 1023){
-        //transferir dados
         Serial.begin(9600);
         for(int i=0; i<2*quantity; i+=2){
             Serial.println(eepromRead(i>>8 | B01010000, i & 0xFF)/10);
@@ -237,7 +248,7 @@ void transferData(int quantity){
 
 
 void set_Timer(){
-    //configura timer0 com 1ms entre interrupções para troca do display de 7 seg
+    //configura timer0 com 4ms entre interrupções para troca do display de 7 seg
     TCCR0A = 0x02;
     OCR0A = 64;
     TIMSK0 = 0x02;
@@ -270,6 +281,7 @@ ISR(TIMER1_COMPA_vect){
     }
 }
 
+//escreve 2 bytes de dados consecutivos na EEPROM
 void eepromWrite(byte deviceAddr, byte wordAddr, word data) {
   Wire.beginTransmission(deviceAddr);
   Wire.write(wordAddr);
@@ -279,6 +291,7 @@ void eepromWrite(byte deviceAddr, byte wordAddr, word data) {
   delay(3);
 }
 
+//escreve bytes nos endereços x[2046] e x[2047] da EEPROM para armazenar o número de registros
 void eepromSetPointer(word dataAddr){
   Wire.beginTransmission(B01010111);
   Wire.write(B11111110);
@@ -288,6 +301,7 @@ void eepromSetPointer(word dataAddr){
   delay(3);
 }
 
+//lê 2 bytes consecutivos da EEPROM
 word eepromRead(byte deviceAddr, byte wordAddr) {
   word data;
   Wire.beginTransmission(deviceAddr);
@@ -304,6 +318,7 @@ word eepromRead(byte deviceAddr, byte wordAddr) {
   return 0xFFFF;
 }
 
+//lê 2 bytes dos endereços x[2046] e x[2047] da EEPROM para obter o próximo endereço disponível
 word eepromGetPointer() {
   word addr;
   Wire.beginTransmission(B01010111);
